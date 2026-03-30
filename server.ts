@@ -1,5 +1,9 @@
 import express from "express";
+import cors from "cors";
 import { createServer as createViteServer } from "vite";
+
+console.log('--- SERVER.TS STARTING ---');
+console.log('NODE_ENV:', process.env.NODE_ENV);
 import path from "path";
 import fs from "fs";
 import * as admin from "firebase-admin";
@@ -29,7 +33,13 @@ const db = admin.firestore();
 const app = express();
 const PORT = 3000;
 
+app.use(cors());
 app.use(express.json());
+
+// Health check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
 // HMAC secret (store in env variable in production)
 const HMAC_SECRET = process.env.HMAC_SECRET || "change_me_32_bytes_!!";
@@ -176,6 +186,12 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     const duration = Date.now() - startTime;
     console.log(`Server running on http://localhost:${PORT} (Startup took ${duration}ms)`);
+  });
+
+  // Global error handler
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error('Express Error:', err);
+    res.status(500).json({ error: 'Internal Server Error', message: err.message });
   });
 }
 

@@ -31,7 +31,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log('AuthContext: Setting up onAuthStateChanged listener');
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log('AuthContext: onAuthStateChanged triggered', firebaseUser ? `User: ${firebaseUser.uid}` : 'No user');
       setUser(firebaseUser);
       if (!firebaseUser) {
         setProfile(null);
@@ -47,12 +49,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const loadProfile = async () => {
       if (user) {
+        console.log('AuthContext: Loading profile for', user.uid);
         setLoading(true);
         try {
           const userRef = doc(db, 'users', user.uid);
           const userSnap = await getDoc(userRef);
           
           if (!userSnap.exists()) {
+            console.log('AuthContext: Profile not found, creating new profile');
             const newProfile: UserProfile = {
               uid: user.uid,
               displayName: user.displayName,
@@ -67,14 +71,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await setDoc(userRef, newProfile);
             setProfile(newProfile);
           } else {
+            console.log('AuthContext: Profile loaded successfully');
             setProfile(userSnap.data() as UserProfile);
           }
 
+          console.log('AuthContext: Setting up profile snapshot listener');
           unsubProfile = onSnapshot(userRef, (doc) => {
-            if (doc.exists()) setProfile(doc.data() as UserProfile);
+            if (doc.exists()) {
+              console.log('AuthContext: Profile updated in real-time');
+              setProfile(doc.data() as UserProfile);
+            }
           });
         } catch (error) {
-          console.error('Error loading profile:', error);
+          console.error('AuthContext: Error loading profile:', error);
         } finally {
           setLoading(false);
         }
@@ -84,7 +93,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadProfile();
 
     return () => {
-      if (unsubProfile) unsubProfile();
+      if (unsubProfile) {
+        console.log('AuthContext: Cleaning up profile snapshot listener');
+        unsubProfile();
+      }
     };
   }, [user]);
 
