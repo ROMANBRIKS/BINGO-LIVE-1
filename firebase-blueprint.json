@@ -1,0 +1,116 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the Bingo Live platform.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID." },
+        "displayName": { "type": "string", "description": "User's display name." },
+        "photoURL": { "type": "string", "description": "User's profile photo URL." },
+        "diamonds": { "type": "number", "description": "Virtual currency for buying gifts." },
+        "beans": { "type": "number", "description": "Virtual currency earned by streamers." },
+        "vipLevel": { "type": "number", "description": "User's VIP level based on spending." },
+        "totalSpent": { "type": "number", "description": "Total diamonds spent by the user." },
+        "server": { "type": "string", "description": "The server region (e.g., S1, S2)." },
+        "isLive": { "type": "boolean", "description": "Whether the user is currently streaming." },
+        "currentStreamId": { "type": "string", "description": "The ID of the current stream if live." }
+      },
+      "required": ["uid", "displayName"]
+    },
+    "Stream": {
+      "title": "Stream",
+      "description": "A live stream session.",
+      "type": "object",
+      "properties": {
+        "streamId": { "type": "string", "description": "Unique stream ID." },
+        "streamerId": { "type": "string", "description": "UID of the streamer." },
+        "title": { "type": "string", "description": "Stream title." },
+        "viewerCount": { "type": "number", "description": "Current number of viewers." },
+        "startTime": { "type": "string", "format": "date-time", "description": "When the stream started." },
+        "status": { "type": "string", "enum": ["active", "ended"], "description": "Current status." }
+      },
+      "required": ["streamId", "streamerId", "status"]
+    },
+    "Gift": {
+      "title": "Gift",
+      "description": "A virtual gift that can be sent to streamers.",
+      "type": "object",
+      "properties": {
+        "giftId": { "type": "string", "description": "Unique gift ID." },
+        "name": { "type": "string", "description": "Name of the gift." },
+        "price": { "type": "number", "description": "Price in diamonds." },
+        "icon": { "type": "string", "description": "Icon URL or emoji." }
+      },
+      "required": ["giftId", "name", "price"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A record of a gift sent from a viewer to a streamer.",
+      "type": "object",
+      "properties": {
+        "txId": { "type": "string", "description": "Unique transaction ID." },
+        "uid": { "type": "string", "description": "UID of the sender." },
+        "streamerId": { "type": "string", "description": "UID of the receiver." },
+        "giftId": { "type": "string", "description": "ID of the gift sent." },
+        "diamondsSpent": { "type": "number", "description": "Diamonds deducted from sender." },
+        "beansEarned": { "type": "number", "description": "Beans added to receiver." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When it happened." }
+      },
+      "required": ["txId", "uid", "streamerId", "giftId", "diamondsSpent", "beansEarned"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "A report filed against a streamer.",
+      "type": "object",
+      "properties": {
+        "reportId": { "type": "string", "description": "Unique report ID." },
+        "reporterId": { "type": "string", "description": "UID of the person reporting." },
+        "streamerId": { "type": "string", "description": "UID of the streamer being reported." },
+        "reason": { "type": "string", "description": "Reason for the report." },
+        "status": { "type": "string", "enum": ["pending", "resolved"], "description": "Current status." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When it was filed." }
+      },
+      "required": ["reportId", "reporterId", "streamerId", "reason", "status"]
+    },
+    "Signaling": {
+      "title": "Signaling",
+      "description": "WebRTC signaling data for a stream.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["offer", "answer", "candidate"], "description": "Type of signal." },
+        "from": { "type": "string", "description": "UID of the sender." },
+        "to": { "type": "string", "description": "UID of the receiver." },
+        "data": { "type": "string", "description": "SDP or ICE candidate JSON." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When it was sent." }
+      },
+      "required": ["type", "from", "data"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles."
+    },
+    "/streams/{streamId}": {
+      "schema": "Stream",
+      "description": "Active and past streams."
+    },
+    "/gifts/{giftId}": {
+      "schema": "Gift",
+      "description": "Available gifts."
+    },
+    "/transactions/{txId}": {
+      "schema": "Transaction",
+      "description": "Gift transaction logs."
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "User reports."
+    },
+    "/streams/{streamId}/signals/{signalId}": {
+      "schema": "Signaling",
+      "description": "WebRTC signaling messages for a specific stream."
+    }
+  }
+}

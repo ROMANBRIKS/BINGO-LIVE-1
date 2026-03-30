@@ -1,0 +1,256 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required) - Unique user ID.
+    //   - displayName: string (required, < 50 chars) - User's display name.
+    //   - photoURL: string (optional, URL) - User's profile photo URL.
+    //   - diamonds: number (required, >= 0) - Virtual currency for buying gifts.
+    //   - beans: number (required, >= 0) - Virtual currency earned by streamers.
+    //   - vipLevel: number (required, >= 0) - User's VIP level.
+    //   - totalSpent: number (required, >= 0) - Total diamonds spent.
+    //   - server: string (optional, enum) - Server region.
+    //   - isLive: boolean (required) - Whether the user is currently streaming.
+    //   - currentStreamId: string (optional) - The ID of the current stream.
+    //   - role: string (required, enum: ['user', 'admin']) - User's role.
+    //
+    // Collection: streams
+    // Document ID: {streamId}
+    // Fields:
+    //   - streamId: string (required) - Unique stream ID.
+    //   - streamerId: string (required) - UID of the streamer.
+    //   - title: string (required, < 100 chars) - Stream title.
+    //   - viewerCount: number (required, >= 0) - Current number of viewers.
+    //   - startTime: timestamp (required) - When the stream started.
+    //   - status: string (required, enum: ['active', 'ended']) - Current status.
+    //
+    // Collection: gifts
+    // Document ID: {giftId}
+    // Fields:
+    //   - giftId: string (required) - Unique gift ID.
+    //   - name: string (required, < 30 chars) - Name of the gift.
+    //   - price: number (required, > 0) - Price in diamonds.
+    //   - icon: string (required) - Icon URL or emoji.
+    //
+    // Collection: transactions
+    // Document ID: {txId}
+    // Fields:
+    //   - txId: string (required) - Unique transaction ID.
+    //   - uid: string (required) - UID of the sender.
+    //   - streamerId: string (required) - UID of the receiver.
+    //   - giftId: string (required) - ID of the gift sent.
+    //   - diamondsSpent: number (required, > 0) - Diamonds deducted from sender.
+    //   - beansEarned: number (required, > 0) - Beans added to receiver.
+    //   - timestamp: timestamp (required) - When it happened.
+    //
+    // Collection: reports
+    // Document ID: {reportId}
+    // Fields:
+    //   - reportId: string (required) - Unique report ID.
+    //   - reporterId: string (required) - UID of the person reporting.
+    //   - streamerId: string (required) - UID of the streamer being reported.
+    //   - reason: string (required, < 500 chars) - Reason for the report.
+    //   - status: string (required, enum: ['pending', 'resolved']) - Current status.
+    //   - timestamp: timestamp (required) - When it was filed.
+    //
+    // Collection: streams/{streamId}/signals
+    // Document ID: {signalId}
+    // Fields:
+    //   - type: string (required, enum: ['offer', 'answer', 'candidate']) - Type of signal.
+    //   - from: string (required) - UID of the sender.
+    //   - to: string (required) - UID of the receiver.
+    //   - data: string (required) - SDP or ICE candidate JSON.
+    //   - timestamp: timestamp (required) - When it was sent.
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "rogershep101@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'displayName', 'diamonds', 'beans', 'vipLevel', 'totalSpent', 'isLive', 'role']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() < 50 &&
+             data.diamonds is number && data.diamonds >= 0 &&
+             data.beans is number && data.beans >= 0 &&
+             data.vipLevel is number && data.vipLevel >= 0 &&
+             data.totalSpent is number && data.totalSpent >= 0 &&
+             data.isLive is bool &&
+             data.role in ['user', 'admin'];
+    }
+
+    function isValidStream(data) {
+      return hasRequiredFields(['streamId', 'streamerId', 'title', 'viewerCount', 'startTime', 'status']) &&
+             data.streamId is string &&
+             data.streamerId is string &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.viewerCount is number && data.viewerCount >= 0 &&
+             data.startTime is timestamp &&
+             data.status in ['active', 'ended'];
+    }
+
+    function isValidGift(data) {
+      return hasRequiredFields(['giftId', 'name', 'price', 'icon']) &&
+             data.giftId is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 30 &&
+             data.price is number && data.price > 0 &&
+             data.icon is string;
+    }
+
+    function isValidTransaction(data) {
+      return hasRequiredFields(['txId', 'uid', 'streamerId', 'giftId', 'diamondsSpent', 'beansEarned', 'timestamp']) &&
+             data.txId is string &&
+             data.uid is string &&
+             data.streamerId is string &&
+             data.giftId is string &&
+             data.diamondsSpent is number && data.diamondsSpent > 0 &&
+             data.beansEarned is number && data.beansEarned > 0 &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidReport(data) {
+      return hasRequiredFields(['reportId', 'reporterId', 'streamerId', 'reason', 'status', 'timestamp']) &&
+             data.reportId is string &&
+             data.reporterId is string &&
+             data.streamerId is string &&
+             data.reason is string && data.reason.size() > 0 && data.reason.size() < 500 &&
+             data.status in ['pending', 'resolved'] &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidSignal(data) {
+      return hasRequiredFields(['type', 'from', 'to', 'data', 'timestamp']) &&
+             data.type in ['offer', 'answer', 'candidate'] &&
+             data.from is string &&
+             data.to is string &&
+             data.data is string &&
+             data.timestamp is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Users can read their own profile. Public profiles are limited to non-PII.
+      // For simplicity in this prototype, we allow authenticated users to read other profiles
+      // but we ensure PII (like email) isn't stored in the public user doc.
+      allow read: if isAuthenticated();
+      
+      // Create: user can create their own profile as 'user' role.
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
+                    request.resource.data.role == 'user' &&
+                    request.resource.data.diamonds == 0 &&
+                    request.resource.data.beans == 0 &&
+                    request.resource.data.vipLevel == 0 &&
+                    request.resource.data.totalSpent == 0;
+      
+      // Update: user can update their own profile, but cannot change their role or currency directly.
+      // Currency updates should happen via Cloud Functions (or in this case, we'll simulate it securely).
+      // For this prototype, we'll allow the user to update their displayName/photoURL/isLive.
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
+                    request.resource.data.role == resource.data.role &&
+                    request.resource.data.diamonds == resource.data.diamonds &&
+                    request.resource.data.beans == resource.data.beans &&
+                    request.resource.data.vipLevel == resource.data.vipLevel &&
+                    request.resource.data.totalSpent == resource.data.totalSpent;
+      
+      // Admin can update anything (e.g., to ban or award currency).
+      allow update: if isAdmin() && isValidUser(request.resource.data);
+    }
+
+    match /streams/{streamId} {
+      allow read: if isAuthenticated();
+      
+      // Streamer can create their own stream.
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.streamerId && 
+                    isValidStream(request.resource.data) &&
+                    request.resource.data.status == 'active';
+      
+      // Streamer can update their own stream (e.g., end it).
+      allow update: if isAuthenticated() && request.auth.uid == resource.data.streamerId && 
+                    isValidStream(request.resource.data);
+      
+      // Viewers can update viewerCount (increment/decrement).
+      // In a real app, this would be a Cloud Function to prevent abuse.
+      allow update: if isAuthenticated() && 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewerCount']) &&
+                    math.abs(request.resource.data.viewerCount - resource.data.viewerCount) == 1;
+
+      allow delete: if isAdmin();
+    }
+
+    match /gifts/{giftId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /transactions/{txId} {
+      // Users can only read transactions they are involved in.
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.uid || request.auth.uid == resource.data.streamerId || isAdmin());
+      
+      // Transactions are created by the sender.
+      // In a real app, this MUST be a Cloud Function to handle currency logic atomically.
+      // For this prototype, we'll allow it if the user is authenticated.
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.uid && 
+                    isValidTransaction(request.resource.data);
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.reporterId && 
+                    isValidReport(request.resource.data);
+      allow update: if isAdmin() && isValidReport(request.resource.data);
+    }
+
+    match /streams/{streamId}/signals/{signalId} {
+      // Only streamer and the specific viewer can read/write signals.
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.from || request.auth.uid == resource.data.to);
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.from && 
+                    isValidSignal(request.resource.data);
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.from || request.auth.uid == resource.data.to);
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Bingo Live",
+  "description": "A high-energy live streaming platform with virtual gifting, PK battles, and VIP rewards.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
